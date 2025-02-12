@@ -1,6 +1,5 @@
 require("dotenv").config();
 require("./config/dbConfig.js");
-
 const PORT = process.env.PORT || 1814;
 const express = require("express");
 const morgan = require("morgan");
@@ -25,9 +24,10 @@ app.get("/", (req, res) => {
 
 app.use(morgan("dev"));
 
-app.get("/users", (req, res) => {
+app.get("/users", async (req, res) => {
     try {
-        // To be implemented
+        const users = await User.find();
+        res.status(200).json({ status: "success", data: users });
     } catch (err) {
         console.log("Error in GET /users", err.message);
         res.status(500).json({ status: "fail", message: "Internal Server Error " + err.message });
@@ -77,7 +77,6 @@ app.post("/otps", async (req, res) => {
     await OTP.create({ email, otp });
     res.status(201).json({ status: "success", message: `OTP sent to ${email}` });
 });
-
 
 
 
