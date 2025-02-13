@@ -8,6 +8,8 @@ const User = require("./models/userModel.js");
 const { generateOTP } = require("./utils/otpHelpers.js");
 const { sendOtpEmail } = require("./utils/emailHelpers.js");
 const OTP = require("./models/otpModel.js");
+const bcrypt = require("bcrypt");
+
 
 const app = express();
 
@@ -34,12 +36,43 @@ app.get("/users", async (req, res) => {
     }
 });
 
-// POST
-app.post("/users", async (req, res) => {
+// POST  --- /users/register
+app.post("/users/register", async (req, res) => {
     try {
-        const userInfo = req.body;
-        const newUser = await User.create(userInfo);
-        res.status(201).json({
+        const otpDoc = await OTP.findOne({
+            email: email,
+        }).sort("-createdAt ");
+
+        if(!otpDoc){
+            res.status(400);
+            res.json({
+                status: "fail",
+                message: "Either OTP not send to email or OTP is expired",
+            })
+            return;
+        }
+
+        const {otp : hashedOtp} = otpDoc;
+        const isOtpCorrect = await bcrypt.compare(otp.toString(), hashedOtp);
+
+        if(!isOtpCorrect){
+            res.status(401);
+            res.json({
+                status: "fail",
+                message: "invalid OTP",
+            })
+            return;
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 14);
+
+        const newUser = await User.create({
+            email,
+            password: hashedPassword,
+        }); // put user data in database
+
+        res.status(201);
+        res.json({
             status: "success",
             data: {
                 user: {
@@ -49,13 +82,30 @@ app.post("/users", async (req, res) => {
             },
         });
     } catch (err) {
-        console.log("--- Error in /POST users ---", err.name, err.code, err.message);
+        console.log("--- Error in /POST users ---");
+        console.log(err.name, err.code);
+        console.log(err.message);
         if (err.name === "ValidationError") {
-            res.status(400).json({ status: "fail", message: "Data validation failed: " + err.message });
+            // mistake of client that he has not sent the valid data
+            res.status(400);
+            res.json({
+                status: "fail",
+                message: "Data validation failed: " + err.message,
+            });
         } else if (err.code === 11000) {
-            res.status(400).json({ status: "fail", message: "Email already exists!" });
+            // mistake of client that he is using the email which already registered
+            res.status(400);
+            res.json({
+                status: "fail",
+                message: "Email already exists!",
+            });
         } else {
-            res.status(500).json({ status: "fail", message: "Internal Server Error" });
+            // generic mistake by server
+            res.status(500);
+            res.json({
+                status: "fail",
+                message: "Internal Server Error",
+            });
         }
     }
 });
@@ -71,13 +121,30 @@ app.post("/otps", async (req, res) => {
     const isEmailSent = await sendOtpEmail(email, otp);
 
     if (!isEmailSent) {
-        return res.status(500).json({ status: "fail", message: "Email could not be sent! Please try again after 30 seconds!" });
+        // this is the case when isEmailSent is false
+        res.status(500).json({
+            status: "fail",
+            message: "Email could not be sent! Please try again after 30 seconds!",
+        });
+        return;
     }
 
-    await OTP.create({ email, otp });
-    res.status(201).json({ status: "success", message: `OTP sent to ${email}` });
-});
+    // store the OTP in database
+    // store it in secured way
+    const newSalt = await bcrypt.genSalt(14); // rounds-x == iterations pow(2,x)
+    const hashedOtp = await bcrypt.hash(otp.toString(), newSalt);
 
+    await OTP.create({
+        email,
+        otp: hashedOtp,
+    });
+    // send the success response
+    res.status(201);
+    res.json({
+        status: "success",
+        message: `OTP sent to ${email}`,
+    });
+});
 
 
 app.listen(PORT, () => {
