@@ -1,6 +1,6 @@
 require("dotenv").config();
 require("./config/dbConfig.js");
-const PORT = process.env.PORT || 1814;
+const PORT = process.env.PORT || 1814; 
 const express = require("express");
 const morgan = require("morgan");
 const cors = require("cors");
@@ -9,61 +9,79 @@ const { generateOTP } = require("./utils/otpHelpers.js");
 const { sendOtpEmail } = require("./utils/emailHelpers.js");
 const OTP = require("./models/otpModel.js");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
+const Task = require("./models/taskModel.js");
 
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+app.use(morgan("dev")); 
+app.use(
+    cors({
+        credentials: true,
+        origin: process.env.FRONTEND_URL,
+    })
+);
+
+app.use(express.json()); 
+
 app.use((req, res, next) => {
-    console.log("request received --> ", req.url);
+    console.log("=> Request received -->", req.url);
     next();
 });
+
 
 app.get("/", (req, res) => {
     res.send("<h1>Server is working fine ...</h1>");
 });
 
-app.use(morgan("dev"));
-
-app.get("/users", async (req, res) => {
+app.get("/users", (req, res) => {
     try {
-        const users = await User.find();
-        res.status(200).json({ status: "success", data: users });
+        // we will complete it after sometime
     } catch (err) {
-        console.log("Error in GET /users", err.message);
-        res.status(500).json({ status: "fail", message: "Internal Server Error " + err.message });
+        console.log("Error in GET /users");
+        console.log(err.message);
+        res.status(500);
+        res.json({
+            status: "fail",
+            message: "Internal Server Error " + err.message,
+        });
     }
 });
 
-// POST  --- /users/register
 app.post("/users/register", async (req, res) => {
     try {
+        const { email, password, otp } = req.body; // this is from user request
+
         const otpDoc = await OTP.findOne({
             email: email,
-        }).sort("-createdAt ");
+        }).sort("-createdAt"); // https://mongoosejs.com/docs/api/query.html
 
-        if(!otpDoc){
+        // check if the otp was sent to email or not
+        if (!otpDoc) {
             res.status(400);
             res.json({
                 status: "fail",
-                message: "Either OTP not send to email or OTP is expired",
-            })
+                message: "Either OTP is not sent to the given email or it is expired! Please try again!",
+            });
             return;
         }
 
-        const {otp : hashedOtp} = otpDoc;
-        const isOtpCorrect = await bcrypt.compare(otp.toString(), hashedOtp);
+        const { otp: hashedOtp } = otpDoc; // renaming otp to hashedOtp to avoid conflict in variable names
 
-        if(!isOtpCorrect){
+        // verify if the otp is correct
+        const isOtpCorrect = await bcrypt.compare(otp.toString(), hashedOtp);
+        if (!isOtpCorrect) {
             res.status(401);
             res.json({
                 status: "fail",
-                message: "invalid OTP",
-            })
+                message: "Invalid OTP !",
+            });
             return;
         }
 
+        // store the password securely
         const hashedPassword = await bcrypt.hash(password, 14);
 
         const newUser = await User.create({
@@ -110,16 +128,22 @@ app.post("/users/register", async (req, res) => {
     }
 });
 
-// OTPS
 app.post("/otps", async (req, res) => {
-    const { email } = req.query;
+    const { email } = req.body; 
+    // validate if the user is sending email
     if (!email) {
-        return res.status(400).json({ status: "fail", message: 'Missing required parameter: "email"' });
+        res.status(400).json({
+            status: "fail",
+            message: 'Missing required parameter: "email"',
+        });
+        return;
     }
-
+    
+    // create 4 digit OTP
     const otp = generateOTP();
+    // send the OTP to email
     const isEmailSent = await sendOtpEmail(email, otp);
-
+    // isEmailSent can be true or false
     if (!isEmailSent) {
         // this is the case when isEmailSent is false
         res.status(500).json({
@@ -129,15 +153,16 @@ app.post("/otps", async (req, res) => {
         return;
     }
 
-    // store the OTP in database
-    // store it in secured way
+    // SALTING + HASHING the OTP to save in database
     const newSalt = await bcrypt.genSalt(14); // rounds-x == iterations pow(2,x)
     const hashedOtp = await bcrypt.hash(otp.toString(), newSalt);
 
+    // store the OTP In database
     await OTP.create({
         email,
         otp: hashedOtp,
     });
+
     // send the success response
     res.status(201);
     res.json({
@@ -146,7 +171,166 @@ app.post("/otps", async (req, res) => {
     });
 });
 
+app.post("/users/login", async (req, res) => {
+    try {
+        const { email, password } = req.body; // user will send plain password
+
+        if (!email || !password) {
+            res.status(400);
+            res.json({
+                status: "fail",
+                message: "Email and password is required!",
+            });
+        }
+
+        // check if the email is of a registered user
+        const currUser = await User.findOne({ email: email });
+
+        if (!currUser) {
+            res.status(400);
+            res.json({
+                status: "fail",
+                message: "User is not registered!",
+            });
+            return;
+        }
+        
+        // match the password if email ...
+        const { password: hashedPassword, fullName, _id } = currUser; // currUser --> DB document
+        const isPasswordCorrect = await bcrypt.compare(password, hashedPassword);
+
+        // if password is incorrect
+        if (!isPasswordCorrect) {
+            res.status(401);
+            res.json({
+                status: "fail",
+                message: "Invalid email or password!",
+            });
+            return;
+        }
+
+        // issue a jwt token for the validating the user requests in future
+        const token = jwt.sign(
+            {
+                email,
+                _id,
+                fullName,
+            }, // payload
+            process.env.JWT_SECRET_KEY, // secret key
+            {
+                expiresIn: "1d",
+            }
+        );
+
+        
+        res.cookie("authorization", token, {
+            httpOnly: true, // it cannot be accessed by JS code on client machine
+            secure: true, // it will be only sent on https connections
+            sameSite: "None", // currently our backend is on separate domain and frontend is on separate domain
+            // in production, when you host BE and FE on same domain, make it "Strict"
+        });
+
+        res.status(200);
+        res.json({
+            status: "success",
+            message: "User logged in",
+            data: {
+                user: {
+                    email,
+                    fullName,
+                },
+            },
+        });
+
+        // send success
+    } catch (err) {
+        console.log("Error in login", err.message);
+        res.status(500);
+        res.json({
+            status: "fail",
+            message: "Internal Server Error",
+        });
+    }
+});
+
+/* 
+    middleware to authorize the user 
+*/
+
+app.use(cookieParser()); // it reads the cookies and add them to req object :: req.cookies
+
+app.use((req, res, next) => {
+    try {
+        const { authorization } = req.cookies;
+        // we check if authorization key is present in request cookies or not
+        if (!authorization) {
+            res.status(401);
+            res.json({
+                status: "fail",
+                message: "Authorization failed!",
+            });
+            return;
+        }
+
+        // if authorization cookie is present then verify the token
+        jwt.verify(authorization, process.env.JWT_SECRET_KEY, (error, data) => {
+            if (error) {
+                // that means token is invalid (hacking attempt) or expired
+                res.status(401);
+                res.json({
+                    status: "fail",
+                    message: "Authorization failed!",
+                });
+            } else {
+                req.currUser = data;
+                next();
+            }
+        });
+    } catch (err) {
+        console.log("Error in validation middleware", err.message);
+        res.status(500);
+        res.json({
+            status: "fail",
+            message: "Internal Server Error",
+        });
+    }
+});
+
+// CREATEs a task
+app.post("/tasks", async (req, res) => {
+    try {
+        // 1. get the data from request
+        const taskInfo = req.body;
+        const { email } = req.currUser;
+
+        // 2. validate the data :: now mongoose does that
+        // 3. save the data in db :: MongoDB (online --> ATLAS) (offline is pain to setup :: in deployment we will mostly prefer online)
+        const newTask = await Task.create({
+            ...taskInfo,
+            assignor: email,
+        });
+
+        res.status(201); //created
+        res.json({
+            status: "success",
+            data: {
+                task: newTask,
+            },
+        });
+    } catch (err) {
+        console.log("Error in POST /tasks", err.message);
+        if (err.name === "ValidationError") {
+            res.status(400).json({ status: "fail", message: err.message });
+        } else if (err.code === 11000) {
+            res.status(400).json({ status: "fail", message: err.message });
+        } else {
+            res.status(500).json({ status: "fail", message: "Internal Server Error" });
+        }
+    }
+});
+
+
 
 app.listen(PORT, () => {
     console.log(`--------- Server Started on PORT: ${PORT} ---------`);
-});
+}); 

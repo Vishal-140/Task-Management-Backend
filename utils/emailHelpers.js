@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
 const sendEmail = async (to, subject, html) => {
     try {
         const info = await transporter.sendMail({
-            from: '"Task Management Tool" <cloudfile2024@gmail.com>',
+            from: '"Task Management Tool" <vkcshorts@gmail.com>',
             to,
             subject,
             html,
@@ -33,7 +33,7 @@ const sendOtpEmail = async (email, otp) => {
         "OTP verification from Task Management Tool",
         `<p>Your OTP is <span style="color:brown">${otp}</span></p>`
     );
-    
+
     return isEmailSent;
 };
 
