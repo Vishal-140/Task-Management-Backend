@@ -22,7 +22,8 @@ app.use(
         credentials: true,
         origin: process.env.FRONTEND_URL,
     })
-);
+); // this code allows only the frontend with origin "FRONTEND_URL" to talk with backend and
+// It also allows him to send and receive the cookies
 
 app.use(express.json()); 
 
@@ -129,7 +130,9 @@ app.post("/users/register", async (req, res) => {
 });
 
 app.post("/otps", async (req, res) => {
-    const { email } = req.body; 
+    // const { email } = req.query; // for backend testing
+    const { email } = req.body;   // for frontend
+
     // validate if the user is sending email
     if (!email) {
         res.status(400).json({
@@ -219,10 +222,15 @@ app.post("/users/login", async (req, res) => {
             process.env.JWT_SECRET_KEY, // secret key
             {
                 expiresIn: "1d",
-            }
+            } // extra options if you want
         );
 
-        
+        // console.log(token);
+
+        // res.cookie method adds a cookie to frontend in the format :: name, value
+        // frontend should allow the backend to perform cookie operations
+        // in the request use -> credentials: "include" (when you use fetch API)
+        // in the cors options on backend mention -> credentials: true
         res.cookie("authorization", token, {
             httpOnly: true, // it cannot be accessed by JS code on client machine
             secure: true, // it will be only sent on https connections
@@ -253,9 +261,9 @@ app.post("/users/login", async (req, res) => {
     }
 });
 
-/* 
-    middleware to authorize the user 
-*/
+
+
+// middleware to authorize the user 
 
 app.use(cookieParser()); // it reads the cookies and add them to req object :: req.cookies
 
