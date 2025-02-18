@@ -1,6 +1,6 @@
 require("dotenv").config();
 require("./config/dbConfig.js");
-const PORT = process.env.PORT || 1814; 
+const PORT = process.env.PORT || 1814;
 const express = require("express");
 const morgan = require("morgan");
 const cors = require("cors");
@@ -13,10 +13,18 @@ const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const Task = require("./models/taskModel.js");
 
+const cron = require("node-cron");
+
+cron.schedule("* * * * *", () => {
+    console.log("---- ---- ---- running a task every minute ---- ---- ----");
+    // code written here will run every minute
+    // we can send reminder
+});
+
 
 const app = express();
 
-app.use(morgan("dev")); 
+app.use(morgan("dev"));
 app.use(
     cors({
         credentials: true,
@@ -25,7 +33,7 @@ app.use(
 ); // this code allows only the frontend with origin "FRONTEND_URL" to talk with backend and
 // It also allows him to send and receive the cookies
 
-app.use(express.json()); 
+app.use(express.json());
 
 app.use((req, res, next) => {
     console.log("=> Request received -->", req.url);
@@ -53,7 +61,7 @@ app.get("/users", (req, res) => {
 
 app.post("/users/register", async (req, res) => {
     try {
-        const { email, password, otp } = req.body; // this is from user request
+        const { email, password, otp, fullName } = req.body; // this is from user request
 
         const otpDoc = await OTP.findOne({
             email: email,
@@ -88,6 +96,7 @@ app.post("/users/register", async (req, res) => {
         const newUser = await User.create({
             email,
             password: hashedPassword,
+            fullName,
         }); // put user data in database
 
         res.status(201);
@@ -141,7 +150,7 @@ app.post("/otps", async (req, res) => {
         });
         return;
     }
-    
+
     // create 4 digit OTP
     const otp = generateOTP();
     // send the OTP to email
@@ -197,7 +206,7 @@ app.post("/users/login", async (req, res) => {
             });
             return;
         }
-        
+
         // match the password if email ...
         const { password: hashedPassword, fullName, _id } = currUser; // currUser --> DB document
         const isPasswordCorrect = await bcrypt.compare(password, hashedPassword);
@@ -334,6 +343,69 @@ app.post("/tasks", async (req, res) => {
         } else {
             res.status(500).json({ status: "fail", message: "Internal Server Error" });
         }
+    }
+});
+
+// users/me
+app.get("/users/me", (req, res) => {
+    try {
+        const { email, fullName } = req.currUser;
+        res.status(200);
+        res.json({
+            status: "success",
+            data: {
+                user: {
+                    email,
+                    fullName,
+                },
+            },
+        });
+    } catch (err) {
+        console.log("error is GET /users/me", err.message);
+        res.status(500);
+        res.json({
+            status: "fail",
+            message: "INTERNAL SERVER ERROR",
+        });
+    }
+});
+
+// users/logout
+app.get("/users/logout", (req, res) => {
+    try {
+        res.clearCookie("authorization"); // Clearing the cookie
+        res.json({
+            status: "success",
+            message: "User is logged out!",
+        });
+    } catch (error) {
+        console.error("Logout Error:", error);
+        res.status(500).json({
+            status: "error",
+            message: "Something went wrong while logging out!",
+        });
+    }
+});
+
+
+app.get("/tasks", async (req, res) => {
+    try {
+        // we only need to send the tasks where either assignor is the current user or assignee is current user
+        const taskList = await Task.find().or([{ assignor: req.currUser.email }, { assignee: req.currUser.email }]);
+        res.status(200);
+        res.json({
+            status: "success",
+            data: {
+                tasks: taskList,
+            },
+        });
+    } catch (err) {
+        console.log("error is GET /users/me", err.message);
+        res.status(500);
+        res.json({
+            status: "fail",
+            message: "INTERNAL SERVER ERROR",
+        });
     }
 });
 
