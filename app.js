@@ -28,6 +28,7 @@ app.use(morgan("dev"));
 app.use(
     cors({
         credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
         origin: process.env.FRONTEND_URL,
     })
 ); // this code allows only the frontend with origin "FRONTEND_URL" to talk with backend and
@@ -409,6 +410,76 @@ app.get("/tasks", async (req, res) => {
     }
 });
 
+// PATCH - UPDATE
+app.patch('/tasks/:taskId', async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const { workTitle, assignee, priority, status, taskInfo } = req.body;
+        const result = await Task.findByIdAndUpdate(taskId,
+            { workTitle, assignee, priority, status, taskInfo },
+            { new: true, runValidators: true });
+
+        if (!result) {
+            return res.status(400).json({
+                status: "fail",
+                message: "Task ID does not exist!",
+            });
+        }
+        return res.status(200).json({
+            status: "success",
+            data: {
+                task: result
+            },
+        });
+
+    } catch (error) {
+        console.log("Error in PATCH", error.message);
+
+        if (error.name === "CastError") {
+            return res.status(400).json({
+                status: "fail",
+                message: "Invalid parameter",
+            });
+        }
+
+        return res.status(500).json({
+            status: "fail",
+            message: "Internal server error",
+        });
+    }
+});
+
+// DELETE
+app.delete('/tasks/:taskId', async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const result = await Task.findByIdAndDelete(taskId);
+
+        if (!result) {
+            return res.status(400).json({
+                status: "fail",
+                message: "Task ID does not exist!",
+            });
+        }
+
+        return res.status(204).send();
+
+    } catch (error) {
+        console.log(error.message);
+
+        if (error.name === "CastError") {
+            return res.status(400).json({
+                status: "fail",
+                message: "Invalid parameter",
+            });
+        }
+
+        return res.status(500).json({
+            status: "fail",
+            message: "Internal server error",
+        });
+    }
+});
 
 
 app.listen(PORT, () => {
