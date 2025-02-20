@@ -25,6 +25,8 @@ cron.schedule("* * * * *", () => {
 const app = express();
 
 app.use(morgan("dev"));
+app.use(cookieParser());
+
 app.use(
     cors({
         credentials: true,
@@ -321,8 +323,6 @@ app.post("/tasks", async (req, res) => {
         const taskInfo = req.body;
         const { email } = req.currUser;
 
-        // 2. validate the data :: now mongoose does that
-        // 3. save the data in db :: MongoDB (online --> ATLAS) (offline is pain to setup :: in deployment we will mostly prefer online)
         const newTask = await Task.create({
             ...taskInfo,
             assignor: email,
@@ -415,23 +415,35 @@ app.patch('/tasks/:taskId', async (req, res) => {
     try {
         const { taskId } = req.params;
         const { workTitle, assignee, priority, status, taskInfo } = req.body;
-        const result = await Task.findByIdAndUpdate(taskId,
-            { workTitle, assignee, priority, status, taskInfo },
-            { new: true, runValidators: true });
-
-        if (!result) {
-            return res.status(400).json({
+        
+        // check task exists and get current task data
+        const existingTask = await Task.findById(taskId);
+        
+        if (!existingTask) {
+            return res.status(404).json({
                 status: "fail",
                 message: "Task ID does not exist!",
             });
         }
+
+        // current user is authorized to modify this task
+        if (existingTask.assignor !== req.currUser.email && existingTask.assignee !== req.currUser.email) {
+            return res.status(403).json({
+                status: "fail",
+                message: "You are not authorized to modify this task",
+            });
+        }
+
+        const result = await Task.findByIdAndUpdate(
+            taskId,
+            { workTitle, assignee, priority, status, taskInfo },
+            { new: true, runValidators: true }
+        );
+
         return res.status(200).json({
             status: "success",
-            data: {
-                task: result
-            },
+            data: { task: result }
         });
-
     } catch (error) {
         console.log("Error in PATCH", error.message);
 
@@ -453,17 +465,27 @@ app.patch('/tasks/:taskId', async (req, res) => {
 app.delete('/tasks/:taskId', async (req, res) => {
     try {
         const { taskId } = req.params;
-        const result = await Task.findByIdAndDelete(taskId);
-
-        if (!result) {
-            return res.status(400).json({
+        
+        // task exists and get current task data
+        const existingTask = await Task.findById(taskId);
+        
+        if (!existingTask) {
+            return res.status(404).json({
                 status: "fail",
                 message: "Task ID does not exist!",
             });
         }
 
-        return res.status(204).send();
+        // Only task assignor can delete the task
+        if (existingTask.assignor !== req.currUser.email) {
+            return res.status(403).json({
+                status: "fail",
+                message: "Only the task creator can delete this task",
+            });
+        }
 
+        await Task.findByIdAndDelete(taskId);
+        return res.status(204).send();
     } catch (error) {
         console.log(error.message);
 
@@ -484,4 +506,4 @@ app.delete('/tasks/:taskId', async (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`--------- Server Started on PORT: ${PORT} ---------`);
-}); 
+});
