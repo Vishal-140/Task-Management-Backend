@@ -17,26 +17,23 @@ const sendEmail = async (to, subject, html) => {
             subject,
             html,
         });
-        console.log(info.messageId);
+        console.log("Email sent:", info.messageId);
         return true;
     } catch (err) {
-        console.log("Error occurred in sendEmail");
-        console.log(err.message);
+        console.log("Error occurred in sendEmail:", err.message);
         return false;
     }
 };
 
-
 const sendOtpEmail = async (email, otp) => {
-    const isEmailSent = await sendEmail(
+    return await sendEmail(
         email,
         "OTP verification from Task Management Tool",
         `<p>Your OTP is <span style="color:brown">${otp}</span></p>`
     );
-
-    return isEmailSent;
 };
 
 module.exports = {
     sendOtpEmail,
+    sendEmail,
 };

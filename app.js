@@ -7,6 +7,7 @@ const cors = require("cors");
 const User = require("./models/userModel.js");
 const { generateOTP } = require("./utils/otpHelpers.js");
 const { sendOtpEmail } = require("./utils/emailHelpers.js");
+const { checkAndSendReminders } = require("./utils/reminderHelper");
 const OTP = require("./models/otpModel.js");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -17,10 +18,8 @@ const cron = require("node-cron");
 
 cron.schedule("* * * * *", () => {
     console.log("---- ---- ---- running a task every minute ---- ---- ----");
-    // code written here will run every minute
-    // we can send reminder
+    checkAndSendReminders();
 });
-
 
 const app = express();
 

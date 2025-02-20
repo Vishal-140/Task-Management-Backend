@@ -34,9 +34,18 @@ const taskSchema = new mongoose.Schema(
             default: "todo", // Normal, urgent, Urgent, Quick, Instant, Important, low, not urgent, high, high priority
             enum: ["done", "inprogress", "todo", "abandoned"], // select in the frontend (ONLY available options)
         },
+        
+        // To prevent multiple reminder emails
+        reminderSent: { 
+            type: Boolean, 
+            default: false 
+        }, 
+        lastReminderDate: { 
+            type: Date 
+        },
     },
     {
-        timestamps: true, // database will automatically add time stamps to the entries
+        timestamps: true, // database will automatically add timestamps to the entries
     }
 );
 
