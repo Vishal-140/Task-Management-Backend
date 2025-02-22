@@ -30,6 +30,8 @@ const createReminderHtml = (task) => {
 
 const sendTaskReminder = async (task) => {
     try {
+        console.log("inside send task remainder");
+
         const reminderHtml = createReminderHtml(task);
         const subject = `Task Reminder: "${task.taskTitle}" Deadline Approaching`;
 
@@ -38,6 +40,8 @@ const sendTaskReminder = async (task) => {
         // Send to assignor
         const assignorEmailSent = await sendEmail(task.assignor, subject, reminderHtml);
 
+        console.log(assigneeEmailSent, assignorEmailSent);
+        
         if (assigneeEmailSent || assignorEmailSent) {
             await Task.findByIdAndUpdate(task._id, {
                 reminderSent: true,
@@ -72,6 +76,7 @@ const checkAndSendReminders = async () => {
 
         for (const task of tasks) {
             const hoursUntilDeadline = (task.deadline - currentTime) / (1000 * 60 * 60); // Changed `now` to `currentTime`
+            console.log(hoursUntilDeadline, "----" , task);
 
             // Check based on priority
             let shouldSendReminder = false;
@@ -80,6 +85,7 @@ const checkAndSendReminders = async () => {
             else if (task.priority === 'normal' && hoursUntilDeadline <= 24) shouldSendReminder = true;
             else if (task.priority === 'low' && hoursUntilDeadline <= 48) shouldSendReminder = true;
 
+            console.log("Should send remainder", shouldSendReminder);
             if (shouldSendReminder) {
                 await sendTaskReminder(task);
             }

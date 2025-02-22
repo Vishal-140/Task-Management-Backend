@@ -65,6 +65,7 @@ app.post("/users/register", async (req, res) => {
     try {
         const { email, password, otp, fullName } = req.body; // this is from user request
 
+        // check if the OTP is present in db with this email or not
         const otpDoc = await OTP.findOne({
             email: email,
         }).sort("-createdAt"); // https://mongoosejs.com/docs/api/query.html
