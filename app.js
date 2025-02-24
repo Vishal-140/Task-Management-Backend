@@ -533,12 +533,12 @@ app.post("/ai/query", async (req, res) => {
         // Format tasks for AI in a readable way
         const formattedTasks = userTasks.map(
             task =>
-                `**Task Title:** ${task.taskTitle}\n` +
-                `- **Assignee:** ${task.assignee}\n` +
-                `- **Assignor:** ${task.assignor}\n` +
-                `- **Priority:** ${task.priority}\n` +
-                `- **Status:** ${task.status}\n` +
-                `- **Deadline:** ${new Date(task.deadline).toLocaleString()}\n`
+                `Task Title: ${task.taskTitle}\n` +
+                `Assignee: ${task.assignee}\n` +
+                `Assignor: ${task.assignor}\n` +
+                `Priority: ${task.priority}\n` +
+                `Status: ${task.status}\n` +
+                `Deadline: ${new Date(task.deadline).toLocaleString()}\n`
         ).join("\n");
 
         // AI prompt with formatted tasks
