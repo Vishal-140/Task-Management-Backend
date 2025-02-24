@@ -517,6 +517,9 @@ app.post("/ai/query", async (req, res) => {
             });
         }
 
+        // current date and time
+        const currentDateTime = new Date().toLocaleString();
+
         // Get users tasks
         const userTasks = await Task.find().or([
             { assignor: req.currUser.email },
@@ -538,16 +541,34 @@ app.post("/ai/query", async (req, res) => {
                 `Assignor: ${task.assignor}\n` +
                 `Priority: ${task.priority}\n` +
                 `Status: ${task.status}\n` +
-                `Deadline: ${new Date(task.deadline).toLocaleString()}\n`
+                `Deadline: ${new Date(task.deadline).toISOString().replace("T", " ").split(".")[0]} UTC\n`
         ).join("\n");
 
-        // AI prompt with formatted tasks
-        const prompt = `User Question: ${query}\n\nUser's Tasks:\n${formattedTasks}`;
+        // AI prompt
+        const prompt = `
+        You are an AI assistant for a task management application. 
+        Current Date & Time: ${currentDateTime}
+        The user's email is: ${req.currUser.email}
+
+        Here are the user's tasks:
+        ${formattedTasks}
+
+        The user is asking: ${query}
+
+        Your goal is to provide a helpful, accurate, and concise response based on the user's tasks.
+        - If the query is about scheduling, prioritization, task analysis, or deadlines, use the given tasks to offer specific insights.
+        - If the query is about pending tasks, deadlines, or workload distribution, highlight relevant details.
+        - If no relevant information is found in the tasks, politely mention that and provide general task management advice.
+        - If the query is about deadline today, yesterday, tomorrow, or any specific date, calculate that date using the current date and provide an accurate response.
+        - Your response should be consistent.
+
+        Response:
+        `;
 
         const model = genAI.getGenerativeModel({ model: "gemini-pro" });
         const result = await model.generateContent([prompt]);
         const response = await result.response;
-        let aiAnswer = response.text();
+        let aiAnswer = response.text(); 
 
         // response is formatted properly
         aiAnswer = aiAnswer.trim();
