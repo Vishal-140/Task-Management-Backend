@@ -418,10 +418,10 @@ app.patch('/tasks/:taskId', async (req, res) => {
     try {
         const { taskId } = req.params;
         const { workTitle, assignee, priority, status, taskInfo } = req.body;
-        
+
         // check task exists and get current task data
         const existingTask = await Task.findById(taskId);
-        
+
         if (!existingTask) {
             return res.status(404).json({
                 status: "fail",
@@ -468,10 +468,10 @@ app.patch('/tasks/:taskId', async (req, res) => {
 app.delete('/tasks/:taskId', async (req, res) => {
     try {
         const { taskId } = req.params;
-        
+
         // task exists and get current task data
         const existingTask = await Task.findById(taskId);
-        
+
         if (!existingTask) {
             return res.status(404).json({
                 status: "fail",
@@ -517,9 +517,9 @@ app.post("/ai/query", async (req, res) => {
             });
         }
 
-        // Get user's tasks
+        // Get users tasks
         const userTasks = await Task.find().or([
-            { assignor: req.currUser.email }, 
+            { assignor: req.currUser.email },
             { assignee: req.currUser.email }
         ]);
 
@@ -530,25 +530,35 @@ app.post("/ai/query", async (req, res) => {
             });
         }
 
-        // Let Gemini handle the natural language processing
+        // Format tasks for AI in a readable way
+        const formattedTasks = userTasks.map(
+            task =>
+                `**Task Title:** ${task.taskTitle}\n` +
+                `- **Assignee:** ${task.assignee}\n` +
+                `- **Assignor:** ${task.assignor}\n` +
+                `- **Priority:** ${task.priority}\n` +
+                `- **Status:** ${task.status}\n` +
+                `- **Deadline:** ${new Date(task.deadline).toLocaleString()}\n`
+        ).join("\n");
+
+        // AI prompt with formatted tasks
+        const prompt = `User Question: ${query}\n\nUser's Tasks:\n${formattedTasks}`;
+
         const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-        const result = await model.generateContent([
-            `User Question: ${query}`,
-            `User's Tasks: ${JSON.stringify(userTasks)}`
-        ]);
-        
+        const result = await model.generateContent([prompt]);
         const response = await result.response;
-        const aiAnswer = response.text();
+        let aiAnswer = response.text();
+
+        // response is formatted properly
+        aiAnswer = aiAnswer.trim();
 
         res.status(200).json({
             status: "success",
-            data: {
-                answer: aiAnswer
-            }
+            data: { answer: aiAnswer }
         });
 
     } catch (err) {
-        console.log("Error in POST /tasks/query", err.message);
+        console.log("Error in POST /ai/query", err.message);
         res.status(500).json({
             status: "fail",
             message: "Internal Server Error"
