@@ -13,6 +13,9 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const Task = require("./models/taskModel.js");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
 
 const cron = require("node-cron");
 
@@ -503,6 +506,55 @@ app.delete('/tasks/:taskId', async (req, res) => {
     }
 });
 
+// AI RESPONSE
+app.post("/ai/query", async (req, res) => {
+    try {
+        const { query } = req.body;
+        if (!query) {
+            return res.status(400).json({
+                status: "fail",
+                message: "Query is required"
+            });
+        }
+
+        // Get user's tasks
+        const userTasks = await Task.find().or([
+            { assignor: req.currUser.email }, 
+            { assignee: req.currUser.email }
+        ]);
+
+        if (userTasks.length === 0) {
+            return res.status(404).json({
+                status: "fail",
+                message: "No tasks found to analyze"
+            });
+        }
+
+        // Let Gemini handle the natural language processing
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        const result = await model.generateContent([
+            `User Question: ${query}`,
+            `User's Tasks: ${JSON.stringify(userTasks)}`
+        ]);
+        
+        const response = await result.response;
+        const aiAnswer = response.text();
+
+        res.status(200).json({
+            status: "success",
+            data: {
+                answer: aiAnswer
+            }
+        });
+
+    } catch (err) {
+        console.log("Error in POST /tasks/query", err.message);
+        res.status(500).json({
+            status: "fail",
+            message: "Internal Server Error"
+        });
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`--------- Server Started on PORT: ${PORT} ---------`);
