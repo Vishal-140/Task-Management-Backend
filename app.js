@@ -511,79 +511,58 @@ app.post("/ai/query", async (req, res) => {
     try {
         const { query } = req.body;
         if (!query) {
-            return res.status(400).json({
-                status: "fail",
-                message: "Query is required"
-            });
+            return res.status(400).json({ status: "fail", message: "Query is required" });
         }
 
-        // current date and time
         const currentDateTime = new Date().toLocaleString();
+        const userEmail = req.currUser.email;
 
-        // Get users tasks
-        const userTasks = await Task.find().or([
-            { assignor: req.currUser.email },
-            { assignee: req.currUser.email }
-        ]);
+        // Fetch user tasks
+        const userTasks = await Task.find({
+            $or: [{ assignor: userEmail }, { assignee: userEmail }]
+        });
 
-        if (userTasks.length === 0) {
-            return res.status(404).json({
-                status: "fail",
-                message: "No tasks found to analyze"
-            });
+        if (!userTasks.length) {
+            return res.status(404).json({ status: "fail", message: "No tasks found to analyze" });
         }
 
-        // Format tasks for AI in a readable way
-        const formattedTasks = userTasks.map(
-            task =>
-                `Task Title: ${task.taskTitle}\n` +
-                `Assignee: ${task.assignee}\n` +
-                `Assignor: ${task.assignor}\n` +
-                `Priority: ${task.priority}\n` +
-                `Status: ${task.status}\n` +
-                `Deadline: ${new Date(task.deadline).toISOString().replace("T", " ").split(".")[0]} UTC\n`
-        ).join("\n");
+        // Format tasks for AI
+        const formattedTasks = userTasks.map(task => (
+            `Task Title: ${task.taskTitle}\n` +
+            `Assignee: ${task.assignee}\n` +
+            `Assignor: ${task.assignor}\n` +
+            `Priority: ${task.priority}\n` +
+            `Status: ${task.status}\n` +
+            `Deadline: ${new Date(task.deadline).toISOString().replace("T", " ").split(".")[0]} UTC\n`
+        )).join("\n");
 
         // AI prompt
         const prompt = `
-        You are an AI assistant for a task management application. 
+        You are an AI assistant for a task management application.
         Current Date & Time: ${currentDateTime}
-        The user's email is: ${req.currUser.email}
+        User Email: ${userEmail}
 
         Here are the user's tasks:
         ${formattedTasks}
 
-        The user is asking: ${query}
+        The user asked: ${query}
 
-        Your goal is to provide a helpful, accurate, and concise response based on the user's tasks.
-        - If the query is about scheduling, prioritization, task analysis, or deadlines, use the given tasks to offer specific insights.
-        - If the query is about pending tasks, deadlines, or workload distribution, highlight relevant details.
-        - If no relevant information is found in the tasks, politely mention that and provide general task management advice.
-        - If the query is about deadline today, yesterday, tomorrow, or any specific date, calculate that date using the current date and provide an accurate response.
-        - Your response should be consistent.
-
-        Response:
+        Guidelines for response:
+        - If the query involves scheduling, prioritization, or deadlines, analyze the given tasks.
+        - If it's about pending tasks or workload, highlight relevant tasks.
+        - If no relevant data is found, provide general task management advice.
+        - Handle date-related queries dynamically (e.g., "today", "tomorrow", "yesterday").
+        - Ensure consistency and accuracy in the response.
         `;
 
         const model = genAI.getGenerativeModel({ model: "gemini-pro" });
         const result = await model.generateContent([prompt]);
-        const response = await result.response;
-        let aiAnswer = response.text(); 
+        const aiAnswer = result.response.text().trim();
 
-        // response is formatted properly
-        aiAnswer = aiAnswer.trim();
-
-        res.status(200).json({
-            status: "success",
-            data: { answer: aiAnswer }
-        });
-
+        res.status(200).json({ status: "success", data: { answer: aiAnswer } });
     } catch (err) {
-        console.log("Error in POST /ai/query", err.message);
-        res.status(500).json({
-            status: "fail",
-            message: "Internal Server Error"
-        });
+        console.error("Error in POST /ai/query:", err.message);
+        res.status(500).json({ status: "fail", message: "Internal Server Error" });
     }
 });
 
