@@ -555,7 +555,7 @@ app.post("/ai/query", async (req, res) => {
         - Ensure consistency and accuracy in the response.
         `;
 
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
         const result = await model.generateContent([prompt]);
         const aiAnswer = result.response.text().trim();
 
